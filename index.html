@@ -351,7 +351,17 @@
             e.preventDefault();
             if (isPaused) return;
             const rect = canvas.getBoundingClientRect();
-            touchX = e.touches[0].clientX - rect.left;
+            const currentTouchX = e.touches[0].clientX - rect.left;
+
+            if (currentTouchX < CANVAS_WIDTH / 2) {
+                leftPressed = true;
+                rightPressed = false;
+            } else {
+                leftPressed = false;
+                rightPressed = true;
+            }
+
+            touchX = null;
         }
         function handleTouchEnd(e) {
             e.preventDefault();
