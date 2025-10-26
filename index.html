@@ -2,9 +2,9 @@
 <html lang="ru">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Space Shooter (Full PNG)</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>Space Shooter (Fixed)</title>
     <style>
         body {
             margin: 0;
@@ -28,14 +28,16 @@
             max-height: 100vh;
             border-radius: 30px;
             overflow: hidden;
+            background: #00001a;
         }
 
         canvas {
             display: block;
-            background-color: #00001a;
+            background-color: transparent;
             width: 100%;
             height: 100%;
             box-shadow: rgba(50, 50, 93, 0.25) 0px 30px 50px -12px inset, rgba(0, 0, 0, 0.3) 0px 18px 26px -18px inset;
+            touch-action: none;
         }
 
         #ui-overlay {
@@ -91,6 +93,7 @@
             bottom: 0;
             background-color: var(--input-out-of-focus);
             transition: 0.3s;
+            pointer-events: none;
         }
 
         .slider:before {
@@ -125,7 +128,7 @@
             font-family: Montserrat, sans-serif;
             width: 300px;
             height: 250px;
-            translate: -6px -6px;
+            transform: translate(-6px, -6px);
             background: #66dbff;
             border: 3px solid #000000;
             box-shadow: 12px 12px 0 #000000;
@@ -166,21 +169,26 @@
             transition: all 0.3s ease;
             cursor: pointer;
             font-family: Montserrat, sans-serif;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            pointer-events: all;
         }
 
         .button:hover {
-            translate: 1.5px 1.5px;
+            transform: translate(1.5px, 1.5px);
             box-shadow: 1.5px 1.5px 0 #000000;
             background: #1ac2ff;
         }
 
         .button:active {
-            translate: 3px 3px;
+            transform: translate(3px, 3px);
             box-shadow: 0 0 0 #000000;
         }
 
         .card:hover {
-            translate: 0 0;
+            transform: translate(0, 0);
         }
 
         .score-card {
@@ -193,14 +201,14 @@
             background: #66dbff;
             border: 3px solid #000000;
             box-shadow: 6px 6px 0 #000000;
-            translate: -3px -3px;
+            transform: translate(-3px, -3px);
             transition: all 0.3s ease;
             overflow: hidden;
             border-radius: 15px;
         }
 
         .score-card:hover {
-            translate: 0 0;
+            transform: translate(0, 0);
         }
 
         .score-head {
@@ -223,6 +231,22 @@
             font-weight: bold;
             color: #000;
         }
+
+        .controls-container {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: all;
+        }
+
+        .controls-container .button {
+            padding: 12px 20px;
+            font-size: 16px;
+            margin-top: 0;
+        }
     </style>
 </head>
 
@@ -234,7 +258,6 @@
         <canvas id="gameCanvas" width="800" height="600"></canvas>
 
         <div id="ui-overlay">
-
             <div class="score-card">
                 <div class="score-head">
                     <span>Счёт</span>
@@ -245,10 +268,14 @@
             </div>
 
             <label class="switch">
-                <input type="checkbox" class="toggle" id="pauseToggle">
+                <input type="checkbox" class="toggle" id="pauseToggle" />
                 <span class="slider"></span>
-                <span class="card-side"></span>
             </label>
+
+            <div class="controls-container">
+                <button id="leftButton" class="button">Влево</button>
+                <button id="rightButton" class="button">Вправо</button>
+            </div>
         </div>
 
         <div id="pauseMenu" class="hidden">
@@ -260,14 +287,13 @@
                 </div>
             </div>
         </div>
-
     </div>
 
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        const CANVAS_WIDTH = 800;
-        const CANVAS_HEIGHT = 600;
+        const CANVAS_WIDTH = canvas.width;
+        const CANVAS_HEIGHT = canvas.height;
 
         const scoreEl = document.getElementById('score-value');
         const pauseToggle = document.getElementById('pauseToggle');
@@ -276,12 +302,17 @@
         const restartButton = document.getElementById('restartButton');
         const exitButton = document.getElementById('exitButton');
         const bgMusic = document.getElementById('bgMusic');
+        const leftButton = document.getElementById('leftButton');
+        const rightButton = document.getElementById('rightButton');
+
         bgMusic.volume = 0.05;
 
         const playerImage = new Image();
         playerImage.src = 'starship.png';
+
         const asteroidImage1 = new Image();
         asteroidImage1.src = 'asteroid_1.png';
+
         const asteroidImage2 = new Image();
         asteroidImage2.src = 'asteroid_2.png';
 
@@ -297,7 +328,11 @@
         }
         function onImageError(e) {
             console.error(`Не удалось загрузить ${e.target.src}`);
-            alert(`Ошибка: Файл '${e.target.src}' не найден.`);
+            imagesLoaded++;
+            if (imagesLoaded === imagesToLoad) {
+                initStars();
+                resetGame();
+            }
         }
         playerImage.onload = onImageLoad;
         asteroidImage1.onload = onImageLoad;
@@ -306,9 +341,10 @@
         asteroidImage1.onerror = onImageError;
         asteroidImage2.onerror = onImageError;
 
+
         let score = 0;
         let isPaused = false;
-        let gameLoopId;
+        let gameLoopId = null;
         let stars = [];
         let obstacles = [];
 
@@ -322,61 +358,42 @@
 
         let rightPressed = false;
         let leftPressed = false;
-        let touchX = null;
+
 
         document.addEventListener('keydown', keyDownHandler);
         document.addEventListener('keyup', keyUpHandler);
 
         function keyDownHandler(e) {
-            if (e.key === 'Right' || e.key === 'ArrowRight' || e.key === 'd') {
+            if (e.key === 'ArrowRight' || e.key === 'Right' || e.key === 'd') {
                 rightPressed = true;
-            } else if (e.key === 'Left' || e.key === 'ArrowLeft' || e.key === 'a') {
+            } else if (e.key === 'ArrowLeft' || e.key === 'Left' || e.key === 'a') {
                 leftPressed = true;
+            } else if (e.key === ' ' || e.key === 'Spacebar') {
+                // пробел — пауза/рестарт при game over
+                // (не обязательная логика, но удобно)
             }
         }
         function keyUpHandler(e) {
-            if (e.key === 'Right' || e.key === 'ArrowRight' || e.key === 'd') {
+            if (e.key === 'ArrowRight' || e.key === 'Right' || e.key === 'd') {
                 rightPressed = false;
-            } else if (e.key === 'Left' || e.key === 'ArrowLeft' || e.key === 'a') {
+            } else if (e.key === 'ArrowLeft' || e.key === 'Left' || e.key === 'a') {
                 leftPressed = false;
             }
-        }
-
-        canvas.addEventListener('touchstart', handleTouch, { passive: false });
-        canvas.addEventListener('touchmove', handleTouch, { passive: false });
-        canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
-        canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
-
-        function handleTouch(e) {
-            e.preventDefault();
-            if (isPaused) return;
-            const rect = canvas.getBoundingClientRect();
-            const currentTouchX = e.touches[0].clientX - rect.left;
-
-            if (currentTouchX < CANVAS_WIDTH / 2) {
-                leftPressed = true;
-                rightPressed = false;
-            } else {
-                leftPressed = false;
-                rightPressed = true;
-            }
-
-            touchX = null;
-        }
-        function handleTouchEnd(e) {
-            e.preventDefault();
-            touchX = null;
-            leftPressed = false;
-            rightPressed = false;
         }
 
         function drawPlayer() {
-            ctx.drawImage(playerImage, player.x, player.y, player.width, player.height);
+            if (playerImage.complete && playerImage.naturalWidth !== 0) {
+                ctx.drawImage(playerImage, player.x, player.y, player.width, player.height);
+            } else {
+                ctx.fillStyle = '#66dbff';
+                ctx.fillRect(player.x, player.y, player.width, player.height);
+            }
         }
 
         const starSymbols = ['*', '·', '+', '.'];
 
         function initStars() {
+            stars = [];
             for (let i = 0; i < 150; i++) {
                 stars.push({
                     x: Math.random() * CANVAS_WIDTH,
@@ -392,14 +409,12 @@
             ctx.fillStyle = '#00001a';
             ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
             ctx.fillStyle = '#FFFFFF';
-
             for (let star of stars) {
-                ctx.font = `${star.size}px Arial`;
+                ctx.font = `${Math.max(10, Math.floor(star.size))}px Arial`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(star.symbol, star.x, star.y);
                 star.y += star.speed;
-
                 if (star.y > CANVAS_HEIGHT) {
                     star.y = 0;
                     star.x = Math.random() * CANVAS_WIDTH;
@@ -409,7 +424,6 @@
                 }
             }
         }
-
         class Obstacle {
             constructor() {
                 this.width = Math.random() * 20 + 30;
@@ -420,8 +434,17 @@
                 this.isEnemy = Math.random() > 0.4;
                 this.image = this.isEnemy ? asteroidImage1 : asteroidImage2;
             }
-            update() { this.y += this.speed; }
-            draw() { ctx.drawImage(this.image, this.x, this.y, this.width, this.height); }
+            update() {
+                this.y += this.speed;
+            }
+            draw() {
+                if (this.image.complete && this.image.naturalWidth !== 0) {
+                    ctx.drawImage(this.image, this.x, this.y, this.width, this.height);
+                } else {
+                    ctx.fillStyle = '#888';
+                    ctx.fillRect(this.x, this.y, this.width, this.height);
+                }
+            }
         }
 
         function handleObstacles() {
@@ -446,14 +469,9 @@
         }
 
         function movePlayer() {
-            if (touchX !== null) {
-                const center = player.x + player.width / 2;
-                if (touchX > center + 10) { player.x += player.speed; }
-                else if (touchX < center - 10) { player.x -= player.speed; }
-            } else {
-                if (leftPressed && player.x > 0) player.x -= player.speed;
-                if (rightPressed && player.x < CANVAS_WIDTH - player.width) player.x += player.speed;
-            }
+            if (leftPressed && player.x > 0) player.x -= player.speed;
+            if (rightPressed && player.x < CANVAS_WIDTH - player.width) player.x += player.speed;
+
             if (player.x < 0) player.x = 0;
             if (player.x > CANVAS_WIDTH - player.width) player.x = CANVAS_WIDTH - player.width;
         }
@@ -479,6 +497,7 @@
                     playerRect.y + playerRect.height > obsRect.y
                 ) {
                     gameOver();
+                    break;
                 }
             }
         }
@@ -492,8 +511,10 @@
                 bgMusic.pause();
             } else {
                 pauseMenu.classList.add('hidden');
-                gameLoopId = requestAnimationFrame(gameLoop);
-                bgMusic.play();
+                if (!isPaused) {
+                    gameLoopId = requestAnimationFrame(gameLoop);
+                }
+                bgMusic.play().catch(() => { });
             }
         }
 
@@ -520,7 +541,7 @@
             if (gameLoopId) {
                 cancelAnimationFrame(gameLoopId);
             }
-            bgMusic.play().catch(e => console.log("Музыка заблокирована браузером до первого клика."));
+            bgMusic.play().catch(() => { });
             gameLoopId = requestAnimationFrame(gameLoop);
         }
 
@@ -552,6 +573,87 @@
             checkCollisions();
             gameLoopId = requestAnimationFrame(gameLoop);
         }
+
+        leftButton.addEventListener('touchstart', (e) => { e.preventDefault(); leftPressed = true; }, { passive: false });
+        leftButton.addEventListener('touchend', (e) => { e.preventDefault(); leftPressed = false; });
+        leftButton.addEventListener('touchcancel', (e) => { e.preventDefault(); leftPressed = false; });
+        leftButton.addEventListener('mousedown', (e) => { e.preventDefault(); leftPressed = true; });
+        leftButton.addEventListener('mouseup', (e) => { e.preventDefault(); leftPressed = false; });
+        leftButton.addEventListener('mouseleave', (e) => { leftPressed = false; });
+
+        rightButton.addEventListener('touchstart', (e) => { e.preventDefault(); rightPressed = true; }, { passive: false });
+        rightButton.addEventListener('touchend', (e) => { e.preventDefault(); rightPressed = false; });
+        rightButton.addEventListener('touchcancel', (e) => { e.preventDefault(); rightPressed = false; });
+        rightButton.addEventListener('mousedown', (e) => { e.preventDefault(); rightPressed = true; });
+        rightButton.addEventListener('mouseup', (e) => { e.preventDefault(); rightPressed = false; });
+        rightButton.addEventListener('mouseleave', (e) => { rightPressed = false; });
+
+        let dragging = false;
+        function getTouchX(e) {
+            if (e.touches && e.touches.length) {
+                return e.touches[0].clientX;
+            } else if (e.clientX !== undefined) {
+                return e.clientX;
+            }
+            return null;
+        }
+
+        function handleCanvasPointerDown(e) {
+            e.preventDefault();
+            const touchX = getTouchX(e);
+            if (touchX == null) return;
+            dragging = true;
+            const rect = canvas.getBoundingClientRect();
+            const xInCanvas = (touchX - rect.left) * (CANVAS_WIDTH / rect.width);
+            player.x = xInCanvas - player.width / 2;
+        }
+        function handleCanvasPointerMove(e) {
+            if (!dragging) return;
+            e.preventDefault();
+            const touchX = getTouchX(e);
+            if (touchX == null) return;
+            const rect = canvas.getBoundingClientRect();
+            const xInCanvas = (touchX - rect.left) * (CANVAS_WIDTH / rect.width);
+            player.x = xInCanvas - player.width / 2;
+            // clamp
+            if (player.x < 0) player.x = 0;
+            if (player.x > CANVAS_WIDTH - player.width) player.x = CANVAS_WIDTH - player.width;
+        }
+        function handleCanvasPointerUp(e) {
+            e.preventDefault();
+            dragging = false;
+        }
+
+        canvas.addEventListener('touchstart', handleCanvasPointerDown, { passive: false });
+        canvas.addEventListener('touchmove', handleCanvasPointerMove, { passive: false });
+        canvas.addEventListener('touchend', handleCanvasPointerUp, { passive: false });
+        canvas.addEventListener('touchcancel', handleCanvasPointerUp, { passive: false });
+
+        canvas.addEventListener('mousedown', (e) => {
+            handleCanvasPointerDown(e);
+        });
+        window.addEventListener('mousemove', (e) => {
+            handleCanvasPointerMove(e);
+        });
+        window.addEventListener('mouseup', (e) => {
+            handleCanvasPointerUp(e);
+        });
+
+        function unlockAudioOnFirstInteraction() {
+            bgMusic.play().catch(() => { });
+            window.removeEventListener('click', unlockAudioOnFirstInteraction);
+            window.removeEventListener('touchstart', unlockAudioOnFirstInteraction);
+        }
+        window.addEventListener('click', unlockAudioOnFirstInteraction, { once: true });
+        window.addEventListener('touchstart', unlockAudioOnFirstInteraction, { once: true });
+
+        setTimeout(() => {
+            if (imagesLoaded < imagesToLoad) {
+                initStars();
+                resetGame();
+            }
+        }, 3000);
+
     </script>
 </body>
 
